@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from services.detector import load_object_detector
+from backend.services.detector import load_object_detector
 
 # Global application state container for runtime components
 state = {}
