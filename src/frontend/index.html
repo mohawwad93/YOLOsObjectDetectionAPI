@@ -16,131 +16,206 @@
             min-height: 100vh;
             margin: 0;
         }
-        h1 { margin-bottom: 0.5rem; color: #38bdf8; }
-        .container { position: relative; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5); background: #1e293b; padding: 10px; }
-        canvas { display: block; border-radius: 8px; background-color: #000; max-width: 100%; height: auto; }
-        .status-bar { margin-top: 1rem; font-size: 0.9rem; padding: 0.5rem 1rem; border-radius: 20px; background: #334155; }
-        .connected { color: #4ade80; font-weight: bold; }
-        .disconnected { color: #f87171; font-weight: bold; }
-        video { display: none; } /* Hidden video element used to capture feed */
+
+        h1 {
+            margin-bottom: 0.2rem;
+            color: #38bdf8;
+        }
+
+        .container {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.5);
+            background: #1e293b;
+            padding: 10px;
+        }
+
+        canvas {
+            display: block;
+            border-radius: 8px;
+            background-color: #000;
+            max-width: 100%;
+            height: auto;
+        }
+
+        .status-bar {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            background: #334155;
+        }
+
+        .connected {
+            color: #4ade80;
+            font-weight: bold;
+        }
+
+        .disconnected {
+            color: #f87171;
+            font-weight: bold;
+        }
+
+        video {
+            display: none;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Live Object Detection</h1>
-    <p>Real-time edge transformer model processing via WebSockets</p>
+<h1>Live Object Detection</h1>
+<p>JSON Stream Mode — Hardware Accelerated Drawing Backend</p>
 
-    <div class="container">
-        <!-- Main display canvas -->
-        <canvas id="outputCanvas" width="640" height="480"></canvas>
-    </div>
+<div class="container">
+    <canvas id="outputCanvas" width="640" height="480"></canvas>
+</div>
 
-    <div class="status-bar">
-        Status: <span id="status" class="disconnected">Disconnected</span> | <span id="fps">0</span> FPS
-    </div>
+<div class="status-bar">
+    Status: <span id="status" class="disconnected">Disconnected</span> | Processing FPS: <span id="fps">0</span>
+</div>
 
-    <!-- Hidden video node to pump data into HTML5 tracking pipe -->
-    <video id="webcam" autoplay playsinline></video>
+<video id="webcam" autoplay playsinline></video>
 
-    <script>
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('outputCanvas');
-        const ctx = canvas.getContext('2d');
-        const statusEl = document.getElementById('status');
-        const fpsEl = document.getElementById('fps');
+<script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('outputCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusEl = document.getElementById('status');
+    const fpsEl = document.getElementById('fps');
 
-        // Create a secondary hidden canvas to compress frames down cleanly before transmission
-        const hiddenCanvas = document.createElement('canvas');
-        const hiddenCtx = hiddenCanvas.getContext('2d');
-        hiddenCanvas.width = 640;
-        hiddenCanvas.height = 480;
+    const hiddenCanvas = document.createElement('canvas');
+    const hiddenCtx = hiddenCanvas.getContext('2d');
+    hiddenCanvas.width = 640;
+    hiddenCanvas.height = 480;
 
-        let ws;
-        let lastFrameTime = performance.now();
-        let frameCount = 0;
+    let ws;
+    let lastFrameTime = performance.now();
+    let frameCount = 0;
+    let streamInterval = null;
 
-        // 1. Request client media streaming hardware permissions
-        async function setupWebcam() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480, frameRate: { ideal: 15 } },
-                    audio: false
-                });
-                video.srcObject = stream;
-                video.onloadedmetadata = () => {
-                    video.play();
-                    connectWebSocket();
-                };
-            } catch (err) {
-                alert("Webcam access denied or unsupported: " + err.message);
+    // Core structural reference
+    let cachedDetections = { list: [], timestamp: 0 };
+    const MAX_DETECTION_AGE_MS = 250;
+
+    async function setupWebcam() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 640, height: 480, frameRate: { ideal: 30 } },
+                audio: false
+            });
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                video.play();
+                connectWebSocket();
+                renderLoop();
+            };
+        } catch (err) {
+            alert("Webcam setup error: " + err.message);
+        }
+    }
+
+    function connectWebSocket() {
+        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${proto}//${window.location.host}/ws/detect?threshold=0.8`;
+
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            statusEl.textContent = "Connected";
+            statusEl.className = "connected";
+            if(streamInterval) clearInterval(streamInterval);
+            streamInterval = setInterval(sendNextFrame, 66);
+        };
+
+        ws.onclose = () => {
+            statusEl.textContent = "Disconnected";
+            statusEl.className = "disconnected";
+            if(streamInterval) clearInterval(streamInterval);
+            cachedDetections = { list: [], timestamp: 0 };
+            setTimeout(connectWebSocket, 3000);
+        };
+
+        ws.onmessage = (event) => {
+            // FIX: Explicitly slice/truncate the old array length down to zero
+            // This forces JavaScript to completely dump the old canvas bounding boxes out of memory
+            cachedDetections.list.length = 0;
+
+            // Parse and bind the absolute freshest state payload
+            cachedDetections = {
+                list: JSON.parse(event.data),
+                timestamp: performance.now()
+            };
+
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFrameTime >= 1000) {
+                fpsEl.textContent = Math.round((frameCount * 1000) / (now - lastFrameTime));
+                frameCount = 0;
+                lastFrameTime = now;
             }
+        };
+    }
+
+    function sendNextFrame() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+        hiddenCanvas.toBlob((blob) => {
+            if (blob && ws.readyState === WebSocket.OPEN) {
+                blob.arrayBuffer().then((buffer) => {
+                    ws.send(buffer);
+                });
+            }
+        }, 'image/jpeg', 0.4);
+    }
+
+    function renderLoop() {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const currentTime = performance.now();
+        const ageOfDetections = currentTime - cachedDetections.timestamp;
+
+        // Render bounding vectors only if within age brackets
+        if (ageOfDetections < MAX_DETECTION_AGE_MS) {
+            drawBoundingBoxes(cachedDetections.list);
+        } else if (cachedDetections.list.length > 0) {
+            cachedDetections.list.length = 0; // Deep wipe on timeout expiry
         }
 
-        // 2. Manage lifecycle connection loops
-        function connectWebSocket() {
-            // Automatically determine websocket protocol matching host mapping details
-            const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${proto}//${window.location.host}/ws/detect?threshold=0.8`;
+        requestAnimationFrame(renderLoop);
+    }
 
-            ws = new WebSocket(wsUrl);
-            ws.binaryType = "arraybuffer"; // Process streaming fragments as raw binaries
+    function drawBoundingBoxes(detections) {
+        ctx.lineWidth = 3;
+        ctx.font = "bold 16px sans-serif";
+        ctx.textBaseline = "top";
 
-            ws.onopen = () => {
-                statusEl.textContent = "Connected";
-                statusEl.className = "connected";
-                sendFrameLoop(); // Start push sequence loop
-            };
+        detections.forEach((det, idx) => {
+            const { xmin, ymin, xmax, ymax } = det.box;
+            const width = xmax - xmin;
+            const height = ymax - ymin;
 
-            ws.onclose = () => {
-                statusEl.textContent = "Disconnected";
-                statusEl.className = "disconnected";
-                setTimeout(connectWebSocket, 3000); // Retry loop auto-recovery strategy
-            };
+            const color = `hsl(${(idx * 85) % 360}, 85%, 55%)`;
 
-            // 3. Process returned frames from server
-            ws.onmessage = (event) => {
-                const blob = new Blob([event.data], { type: 'image/jpeg' });
-                const img = new Image();
+            ctx.strokeStyle = color;
+            ctx.strokeRect(xmin, ymin, width, height);
 
-                img.onload = () => {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const labelText = `${det.label} (${Math.round(det.score * 100)}%)`;
+            const textWidth = ctx.measureText(labelText).width;
+            const textHeight = 20;
+            const labelY = Math.max(0, ymin - textHeight - 4);
 
-                    // Track browser-side rendering performance Metrics (FPS)
-                    frameCount++;
-                    const now = performance.now();
-                    if (now - lastFrameTime >= 1000) {
-                        fpsEl.textContent = Math.round((frameCount * 1000) / (now - lastFrameTime));
-                        frameCount = 0;
-                        lastFrameTime = now;
-                    }
+            ctx.fillStyle = color;
+            ctx.fillRect(xmin, labelY, textWidth + 8, textHeight + 4);
 
-                    // Trigger next snapshot loop immediately after drawing the previous result
-                    requestAnimationFrame(sendFrameLoop);
-                };
-                img.src = URL.createObjectURL(blob);
-            };
-        }
+            ctx.fillStyle = "white";
+            ctx.fillText(labelText, xmin + 4, labelY + 2);
+        });
+    }
 
-        // 4. Capture and send frames
-        function sendFrameLoop() {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    setupWebcam();
+</script>
 
-            // Paint visible frame matrix down into hidden buffer representation
-            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-
-            // Compress raw frame matrix payload into light optimized JPG streams
-            hiddenCanvas.toBlob((blob) => {
-                if (blob && ws.readyState === WebSocket.OPEN) {
-                    blob.arrayBuffer().then((buffer) => {
-                        ws.send(buffer);
-                    });
-                }
-            }, 'image/jpeg', 0.6); // 60% compression quality balances speed and visibility over the wire
-        }
-
-        // Begin script sequence
-        setupWebcam();
-    </script>
 </body>
 </html>
