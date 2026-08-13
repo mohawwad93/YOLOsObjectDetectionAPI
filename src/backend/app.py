@@ -1,21 +1,24 @@
-import os
+# app.py
 from pathlib import Path
-
 from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 
-from backend.lifespan import lifespan
-from backend.api.endpoints import router as detection_router
+from .lifespan import lifespan
+from .api.routes import api_router
 
-app = FastAPI(
-    title="YOLOS Object Detection API",
-    description="A cleanly architected FastAPI template for ML application streaming workflows.",
-    version="2.0.0",
-    lifespan=lifespan
-)
+def create_app() -> FastAPI:
+    # Factory instead of a bare module-level `app = FastAPI()` — lets
+    # tests spin up a fresh app (fresh lifespan, fresh state) instead of
+    # sharing one global instance and risking state leaking between tests.
+    app = FastAPI(
+        title="YOLOS Object Detection API",
+        version="2.0.0",
+        lifespan=lifespan,
+    )
+    app.include_router(api_router, tags=["Computer Vision"])
 
-app.include_router(detection_router, tags=["Computer Vision"])
+    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+    return app
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR = os.path.join(BASE_DIR, "../frontend")
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+app = create_app()
