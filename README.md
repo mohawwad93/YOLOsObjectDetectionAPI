@@ -5,15 +5,19 @@ both single-image detection (REST) and real-time detection over a video stream
 (WebSocket), served alongside a lightweight HTML/canvas frontend.
 
 This repository is mid-transformation from a working demo into an industry-grade,
-layered service. **This README covers the current, post–Phase 1 state.** For the
-reasoning behind the structure — and for a from-scratch walkthrough if you're
-onboarding or revisiting this later — see:
+layered service. **This README covers the current, post–Phase 2 Step 1 state.**
+For the reasoning behind the structure — and for a from-scratch walkthrough if
+you're onboarding or revisiting this later — see:
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — the layered architecture pattern,
   dependency injection, and configuration management: the *why* and *what*.
 - [`docs/PHASE_1_REFACTORING_GUIDE.md`](docs/PHASE_1_REFACTORING_GUIDE.md) — the
   full transformation walkthrough, decision rules, and a complete file-by-file
   reference of every module.
+- [`docs/PHASE_2_STEP_1_TESTING_GUIDE.md`](docs/PHASE_2_STEP_1_TESTING_GUIDE.md) —
+  the unit and integration test suite: Walking Skeleton testing, Fakes vs.
+  Mocks, `dependency_overrides` internals, and a complete file-by-file
+  reference of every test.
 
 ## Tech stack
 
@@ -54,11 +58,22 @@ src/
 │       └── yolos_engine.py       # Concrete Hugging Face YOLOS implementation
 └── frontend/
     └── index.html
+
+tests/
+├── conftest.py              # shared fixtures — FakeDetectionEngine, app, client
+├── services/
+│   ├── test_detection_service.py
+│   ├── test_annotation.py
+│   └── test_streaming_session.py
+└── api/
+    ├── test_detection.py
+    └── test_streaming.py
 ```
 
 Every module has exactly one reason to change. See `docs/ARCHITECTURE.md` for why
 that property matters and `docs/PHASE_1_REFACTORING_GUIDE.md` for what belongs
-where.
+where. The `tests/` tree mirrors `src/backend/` on purpose — see
+`docs/PHASE_2_STEP_1_TESTING_GUIDE.md`.
 
 ## Getting started
 
@@ -71,6 +86,9 @@ uv run fastapi dev src/backend/app.py
 
 # Open the frontend
 # -> http://localhost:8000
+
+# Run the test suite (fast — no real model weights are ever loaded)
+uv run pytest
 ```
 
 ## Configuration
@@ -135,7 +153,25 @@ keeps only the most recent frame in flight — see
 for why, and how that policy is implemented and tested independently of the
 WebSocket transport.
 
+## Testing
+
+Full unit and integration coverage of the business logic, presentation rules,
+and streaming policy — with zero dependency on real model weights or PyTorch.
+`FakeDetectionEngine` satisfies the `DetectionEngine` Protocol structurally, so
+the entire suite runs in milliseconds and is safe to run on every commit.
+
+```bash
+uv run pytest                       # full suite
+uv run pytest tests/services        # business logic + presentation only
+uv run pytest tests/api             # API layer, real routing + real service
+```
+
+See [`docs/PHASE_2_STEP_1_TESTING_GUIDE.md`](docs/PHASE_2_STEP_1_TESTING_GUIDE.md)
+for the full reasoning and file-by-file reference.
+
 ## Status
 
 - **Phase 1 — Code Architecture & Decoupling:** complete. See the docs above.
-- **Phase 2 — Testing, packaging, and operability (`/healthz`, warmup metrics):** not yet started.
+- **Phase 2, Step 1 — Unit & Integration Testing:** complete. See the docs above.
+- **Phase 2, remaining steps — packaging and operability (`/healthz`, warmup
+  metrics, `uv` packaging):** not yet started.

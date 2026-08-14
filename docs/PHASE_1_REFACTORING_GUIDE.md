@@ -641,22 +641,34 @@ api_router.include_router(streaming_router)
 
 ### `app.py`
 
+> **Updated in Phase 2, Step 1.** The factory now accepts an `app_lifespan`
+> parameter defaulting to the production `lifespan`. This is what let the test
+> suite swap in a lifespan that sets `app.state.engine` directly instead of
+> calling `engine.load()` — `app.dependency_overrides` alone cannot prevent
+> the real lifespan from loading real model weights on startup, since
+> overrides only intercept `Depends()`-resolved dependencies, not the
+> lifespan context manager. See
+> [`PHASE_2_STEP_1_TESTING_GUIDE.md`](PHASE_2_STEP_1_TESTING_GUIDE.md) for the
+> full reasoning.
+
 ```python
 from pathlib import Path
 from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 
-from .lifespan import lifespan
+from .lifespan import lifespan as production_lifespan
 from .api.routes import api_router
 
-def create_app() -> FastAPI:
+def create_app(app_lifespan=production_lifespan) -> FastAPI:
     # Factory instead of a bare module-level `app = FastAPI()` — lets
     # tests spin up a fresh app (fresh lifespan, fresh state) instead of
     # sharing one global instance and risking state leaking between tests.
+    # `app_lifespan` defaults to the real one but can be swapped for a
+    # test lifespan that never touches real model weights.
     app = FastAPI(
         title="YOLOS Object Detection API",
         version="2.0.0",
-        lifespan=lifespan,
+        lifespan=app_lifespan,
     )
     app.include_router(api_router, tags=["Computer Vision"])
 
@@ -693,3 +705,7 @@ making the service operable:
   and a container build that only reinstalls when the lockfile changes.
 - **Warmup metrics and graceful shutdown** — both have an obvious home now:
   `lifespan.py`, right where the engine is loaded and torn down.
+
+> **Status:** the first bullet — the full unit and integration test suite — is
+> complete. See [`PHASE_2_STEP_1_TESTING_GUIDE.md`](PHASE_2_STEP_1_TESTING_GUIDE.md)
+> for the full reference.
