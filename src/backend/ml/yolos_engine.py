@@ -2,6 +2,8 @@ import logging
 import torch
 from PIL import Image
 from transformers import pipeline, Pipeline
+
+from .base import EngineStatus
 from .schemas import BoundingBox, Detection
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ class YolosDetectionEngine:
         self._model_name = model_name
         self._device = self._resolve_device(device_preference)
         self._pipeline: Pipeline | None = None  # set explicitly by load()
+        self._status: EngineStatus = EngineStatus.NOT_LOADED
 
     @staticmethod
     def _resolve_device(preference: str) -> int | str:
@@ -28,17 +31,51 @@ class YolosDetectionEngine:
         return "cpu"
 
     def load(self) -> None:
-        # Explicit load step, called once from lifespan — not at import
-        # time, not on first request. Makes startup cost visible and
-        # gives you a single place to add retry/timeout/warmup logic.
+        """
+        Device resolution + weight loading only. Deliberately does NOT
+        flip status to READY — that's warm_up()'s job — so a caller can
+        observe 'weights loaded, warming up' as a distinct state from
+        'fully ready', which is exactly what lifespan.py does below.
+        """
+        self._status = EngineStatus.LOADING
         logger.info("Loading %s on device=%s", self._model_name, self._device)
-        self._pipeline = pipeline(
-            task="object-detection", model=self._model_name, device=self._device
-        )
+        try:
+            self._pipeline = pipeline(
+                task="object-detection", model=self._model_name, device=self._device
+            )
+        except Exception:
+            self._status = EngineStatus.FAILED
+            # Fail fast: propagate rather than swallow. A retry-with-backoff
+            # for transient network errors belongs INSIDE this try block
+            # (a few attempts before giving up) — but once attempts are
+            # exhausted, re-raising is deliberate. Swallowing it here would
+            # leave status stuck at FAILED with nothing ever finding out.
+            logger.exception("Engine failed to load")
+            raise
+
+    def warm_up(self) -> None:
+        """
+        One throwaway inference before signaling READY — absorbs
+        first-call costs (lazy CUDA context, JIT tracing) that would
+        otherwise land on the first real user request after a deploy.
+        """
+        if self._pipeline is None:
+            raise RuntimeError("warm_up() called before load()")
+        try:
+            self._pipeline(Image.new("RGB", (32, 32)))
+        except Exception:
+            self._status = EngineStatus.FAILED
+            logger.exception("Engine warm-up failed")
+            raise
+        self._status = EngineStatus.READY
+
+    @property
+    def status(self) -> EngineStatus:
+        return self._status
 
     @property
     def is_ready(self) -> bool:
-        return self._pipeline is not None
+        return self._status == EngineStatus.READY
 
     def predict(self, image: Image.Image, threshold: float) -> list[Detection]:
         if not self.is_ready:

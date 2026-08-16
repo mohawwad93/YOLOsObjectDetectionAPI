@@ -5,7 +5,7 @@ both single-image detection (REST) and real-time detection over a video stream
 (WebSocket), served alongside a lightweight HTML/canvas frontend.
 
 This repository is mid-transformation from a working demo into an industry-grade,
-layered service. **This README covers the current, post–Phase 2 Step 1 state.**
+layered service. **This README covers the current, post–Phase 2 Step 2 state.**
 For the reasoning behind the structure — and for a from-scratch walkthrough if
 you're onboarding or revisiting this later — see:
 
@@ -18,6 +18,10 @@ you're onboarding or revisiting this later — see:
   the unit and integration test suite: Walking Skeleton testing, Fakes vs.
   Mocks, `dependency_overrides` internals, and a complete file-by-file
   reference of every test.
+- [`docs/PHASE_2_STEP_2_HEALTH_GUIDE.md`](docs/PHASE_2_STEP_2_HEALTH_GUIDE.md) —
+  liveness vs. readiness, the thundering herd problem, graceful WebSocket
+  shutdown on `SIGTERM`, and a complete file-by-file reference of the
+  `/healthz` and `/readyz` implementation.
 
 ## Tech stack
 
@@ -38,14 +42,15 @@ src/
 │   ├── app.py                    # FastAPI app factory / entrypoint
 │   ├── config.py                 # Pydantic-settings: single source of config truth
 │   ├── dependencies.py           # DI provider functions used with Depends()
-│   ├── lifespan.py               # Wires the ML engine into app.state on startup
+│   ├── lifespan.py               # Background model load, health state, graceful shutdown
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── schemas.py            # Pydantic request/response (wire) models
 │   │   └── routes/
 │   │       ├── __init__.py
 │   │       ├── detection.py      # REST endpoints — HTTP concerns only
-│   │       └── streaming.py      # WebSocket endpoint — HTTP concerns only
+│   │       ├── streaming.py      # WebSocket endpoint — HTTP concerns only
+│   │       └── health.py         # /healthz, /readyz — liveness + readiness probes
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── detection_service.py  # Core domain workflow, shared by both routes
@@ -53,7 +58,7 @@ src/
 │   │   └── streaming_session.py  # Real-time frame-prioritization policy
 │   └── ml/
 │       ├── __init__.py
-│       ├── base.py               # DetectionEngine contract (Protocol)
+│       ├── base.py               # DetectionEngine contract (Protocol) + EngineStatus
 │       ├── schemas.py            # Detection / BoundingBox domain value objects
 │       └── yolos_engine.py       # Concrete Hugging Face YOLOS implementation
 └── frontend/
@@ -119,6 +124,8 @@ APP_DEFAULT_THRESHOLD=0.6
 | `/detect` | `POST` | Upload an image, get back JSON detections (`DetectionResponse`) |
 | `/detect/image` | `POST` | Upload an image, get back a JPEG with bounding boxes drawn on it |
 | `/ws/detect` | `WebSocket` | Stream JPEG frames, receive JSON detections per frame in near real time |
+| `/healthz` | `GET` | Liveness probe — is the process alive? Ignores model load state. |
+| `/readyz` | `GET` | Readiness probe — can this instance serve traffic right now? |
 
 ### `POST /detect`
 
@@ -153,6 +160,18 @@ keeps only the most recent frame in flight — see
 for why, and how that policy is implemented and tested independently of the
 WebSocket transport.
 
+### `GET /healthz` / `GET /readyz`
+
+`/healthz` returns `200 {"status": "alive"}` within milliseconds of container
+start and stays that way through the entire model-loading window — it never
+restarts a pod just because the model is still loading. `/readyz` returns
+`503 {"status": "not_ready", "engine_status": "loading"}` until the model is
+fully loaded and warmed up, then `200 {"status": "ready", "engine_status": "ready"}`.
+See
+[`docs/PHASE_2_STEP_2_HEALTH_GUIDE.md`](docs/PHASE_2_STEP_2_HEALTH_GUIDE.md)
+for the full liveness-vs-readiness reasoning, the graceful WebSocket shutdown
+behavior on `SIGTERM`, and sample Kubernetes probe configuration.
+
 ## Testing
 
 Full unit and integration coverage of the business logic, presentation rules,
@@ -173,5 +192,5 @@ for the full reasoning and file-by-file reference.
 
 - **Phase 1 — Code Architecture & Decoupling:** complete. See the docs above.
 - **Phase 2, Step 1 — Unit & Integration Testing:** complete. See the docs above.
-- **Phase 2, remaining steps — packaging and operability (`/healthz`, warmup
-  metrics, `uv` packaging):** not yet started.
+- **Phase 2, Step 2 — Operational Health, Liveness & Readiness:** complete. See the docs above.
+- **Phase 2, remaining steps — packaging with `uv`, container build:** not yet started.

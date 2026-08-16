@@ -9,6 +9,19 @@ def _engine_from_app_state(app) -> DetectionEngine | None:
         return None
     return engine
 
+def get_engine_or_none(request: Request) -> DetectionEngine | None:
+    """
+    Used ONLY by /healthz and /readyz. The feature-route dependencies
+    (get_engine, get_engine_ws) deliberately raise on an unready engine —
+    exactly what you want for a request that can't proceed. Health
+    routes need the opposite: they must inspect status and return a
+    deliberately shaped JSON body with the right status code either way,
+    for both healthy and unhealthy states. A raised HTTPException would
+    short-circuit that into FastAPI's generic {"detail": ...} envelope,
+    which isn't what an orchestrator's probe or a dashboard wants to parse.
+    """
+    return getattr(request.app.state, "engine", None)
+
 def get_engine(request: Request) -> DetectionEngine:
     """HTTP variant: translates 'not loaded' into a 503 response."""
     engine = _engine_from_app_state(request.app)

@@ -8,6 +8,7 @@ from PIL import Image
 
 from backend.app import create_app
 from backend.dependencies import get_engine, get_engine_ws
+from backend.ml.base import EngineStatus
 from backend.ml.schemas import BoundingBox, Detection
 
 
@@ -29,6 +30,10 @@ class FakeDetectionEngine:
             Detection(label="cat", score=0.91, box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100)),
             Detection(label="dog", score=0.42, box=BoundingBox(xmin=150, ymin=20, xmax=260, ymax=180)),
         ]
+
+    @property
+    def status(self) -> EngineStatus:
+        return EngineStatus.READY if self._ready else EngineStatus.NOT_LOADED
 
     @property
     def is_ready(self) -> bool:

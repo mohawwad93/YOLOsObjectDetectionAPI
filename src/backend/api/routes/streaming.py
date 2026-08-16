@@ -15,7 +15,14 @@ async def websocket_detect(
     threshold: float = Query(default=0.5, ge=0.0, le=1.0),
     service: DetectionService = Depends(get_detection_service_ws),
 ):
+    if websocket.app.state.shutting_down:
+        # Reject new sessions once shutdown has begun — accepting one now
+        # would just have to be torn down again seconds later.
+        await websocket.close(code=1001, reason="Server shutting down")
+        return
+
     await websocket.accept()
+    websocket.app.state.active_sessions.add(websocket)
     session = LatestFrameOnlyPolicy(service, threshold)
 
     async def receiver_task() -> None:
@@ -41,3 +48,4 @@ async def websocket_detect(
     finally:
         recv_worker.cancel()
         proc_worker.cancel()
+        websocket.app.state.active_sessions.discard(websocket)

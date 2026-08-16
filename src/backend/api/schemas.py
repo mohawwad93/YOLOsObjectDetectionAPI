@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 from ..ml.schemas import Detection
 
@@ -27,3 +29,12 @@ class DetectionResponse(BaseModel):
     @classmethod
     def from_domain(cls, detections: list[Detection]) -> "DetectionResponse":
         return cls(count=len(detections), detections=[DetectionOut.from_domain(d) for d in detections])
+
+class LivenessResponse(BaseModel):
+    status: Literal["alive", "unhealthy"]
+    reason: str | None = None
+
+class ReadinessResponse(BaseModel):
+    status: Literal["ready", "not_ready"]
+    engine_status: str | None = None
+    reason: str | None = None
