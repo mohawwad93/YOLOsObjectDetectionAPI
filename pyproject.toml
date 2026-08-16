@@ -1,20 +1,59 @@
 [project]
-name = "basicrealtimeobjectdetection"
-version = "0.1.0"
-description = "Add your description here"
+name = "yolos-detection-api"
+version = "0.2.0"
+description = "FastAPI object-detection service wrapping hustvl/yolos-tiny"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
+
 dependencies = [
-    "transformers[torch]>=4.40.0",
-    "torch>=2.2.0",
-    "Pillow>=10.0.0",
-    "accelerate>=0.28.0",
-    "fastapi[standard]>=0.141.1",
+    # fastapi[standard]: pulls in uvicorn[standard] (websockets — required
+    # for /ws/detect) and python-multipart (required for File()/
+    # UploadFile), version-matched by FastAPI's maintainers against this
+    # exact release. Correct as you had it.
+    "fastapi[standard]>=0.141.1,<1",
+
+    # transformers and torch as TWO separate direct dependencies — not
+    # transformers[torch]. tool.uv.sources' index routing below is only
+    # reliably honored for direct dependencies; torch arriving only via
+    # an extra risks the CUDA/CPU platform routing being silently
+    # ignored during resolution.
+    "transformers>=4.49.0,<5",
+    "torch>=2.5,<3",
+    "pillow>=12.3.0,<13",
+    "pydantic-settings>=2.15.0,<3",
 ]
 
 [dependency-groups]
-dev = [
-    "httpx>=0.28.1",
-    "pytest>=9.1.1",
-    "pytest-asyncio>=1.4.0",
+test = ["pytest>=9.1.1,<10", "pytest-asyncio>=1.4.0,<2", "httpx>=0.28.1,<1"]
+dev = [{ include-group = "test" }, "ruff>=0.16.3,<1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/backend"]
+
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+exclude-newer = "2026-08-16T00:00:00Z"
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+# Now reliable — torch is a direct dependency above, not a transitive one.
+torch = [
+    { index = "pytorch-cu126", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
 ]

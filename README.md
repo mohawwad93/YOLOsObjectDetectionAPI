@@ -5,7 +5,7 @@ both single-image detection (REST) and real-time detection over a video stream
 (WebSocket), served alongside a lightweight HTML/canvas frontend.
 
 This repository is mid-transformation from a working demo into an industry-grade,
-layered service. **This README covers the current, post–Phase 2 Step 2 state.**
+layered service. **This README covers the current, post–Phase 2 Step 3 state.**
 For the reasoning behind the structure — and for a from-scratch walkthrough if
 you're onboarding or revisiting this later — see:
 
@@ -22,12 +22,16 @@ you're onboarding or revisiting this later — see:
   liveness vs. readiness, the thundering herd problem, graceful WebSocket
   shutdown on `SIGTERM`, and a complete file-by-file reference of the
   `/healthz` and `/readyz` implementation.
+- [`docs/PHASE_2_STEP_3_DEPENDENCY_MANAGEMENT_GUIDE.md`](docs/PHASE_2_STEP_3_DEPENDENCY_MANAGEMENT_GUIDE.md) —
+  deterministic builds with `uv.lock`, dependency groups, cross-platform
+  CUDA/CPU wheel routing in a single lockfile, and the full `pyproject.toml`
+  reference.
 
 ## Tech stack
 
 | Concern | Choice |
 |---|---|
-| Package/environment management | `uv` |
+| Package/environment management | `uv` — locked, deterministic builds; see `docs/PHASE_2_STEP_3_DEPENDENCY_MANAGEMENT_GUIDE.md` |
 | Web framework | FastAPI (REST + WebSocket) |
 | Model | Hugging Face `transformers` pipeline, `hustvl/yolos-tiny` |
 | Frontend | Static HTML + Canvas, no build step |
@@ -84,9 +88,12 @@ where. The `tests/` tree mirrors `src/backend/` on purpose — see
 
 ```bash
 # Install dependencies into a uv-managed virtual environment
+# (production deps + the `dev` group, which includes `test`)
 uv sync
 
-# Run the API in development mode
+# Run the API locally, with autoreload
+# NOTE: binds 127.0.0.1 by design — local development only, never a
+# container. See docs/PHASE_2_STEP_3_DEPENDENCY_MANAGEMENT_GUIDE.md.
 uv run fastapi dev src/backend/app.py
 
 # Open the frontend
@@ -94,6 +101,15 @@ uv run fastapi dev src/backend/app.py
 
 # Run the test suite (fast — no real model weights are ever loaded)
 uv run pytest
+```
+
+**Container / production** uses a different command — no reload, binds
+`0.0.0.0`, single process per container (scale via replica count, not
+`--workers`; see the guide above for why):
+
+```bash
+uv sync --no-dev --frozen
+uv run fastapi run src/backend/app.py
 ```
 
 ## Configuration
@@ -193,4 +209,5 @@ for the full reasoning and file-by-file reference.
 - **Phase 1 — Code Architecture & Decoupling:** complete. See the docs above.
 - **Phase 2, Step 1 — Unit & Integration Testing:** complete. See the docs above.
 - **Phase 2, Step 2 — Operational Health, Liveness & Readiness:** complete. See the docs above.
-- **Phase 2, remaining steps — packaging with `uv`, container build:** not yet started.
+- **Phase 2, Step 3 — Reproducible Environments & Dependency Management:** complete. See the docs above.
+- **Phase 2, remaining steps — container build (Dockerfile):** not yet started.
