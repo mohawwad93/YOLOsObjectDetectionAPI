@@ -2,6 +2,7 @@
 name: CI
 
 on:
+  workflow_dispatch: # This adds the "Run workflow" button with zero inputs
   pull_request:
     branches: [main]
   push:
