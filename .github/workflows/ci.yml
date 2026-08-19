@@ -1,0 +1,127 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Least-privilege for the workflow's own token — same principle as the
+# Dockerfile's non-root user, applied to CI's credentials. This workflow
+# only ever reads the repo; it never needs to write anything.
+permissions:
+  contents: read
+
+# Cancels an in-progress run for the same PR when a new commit lands,
+# instead of letting a superseded run keep burning CI minutes to
+# completion. Pure cycle-time/cost win, no correctness trade-off — an
+# outdated run's result was never going to matter anyway.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Gate: fast, cheap, runs alone. If this fails, nothing else starts —
+  # a typo costs seconds of CI time, not the minutes a Docker build takes.
+  # ---------------------------------------------------------------------
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          # Restores/saves uv's package cache, keyed against uv.lock's
+          # hash — invalidated only when dependencies actually change.
+          enable-cache: true
+
+      - name: Install dev dependencies
+        run: uv sync --locked --group dev
+
+      - name: Static analysis
+        run: uv run ruff check .
+
+      - name: Formatting check
+        run: uv run ruff format --check .
+
+  # ---------------------------------------------------------------------
+  # Runs in parallel with docker-build — both only need lint to have
+  # passed, not each other.
+  # ---------------------------------------------------------------------
+  test:
+    name: Test (pytest)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        # --extra cpu is required, not optional: app.py's default
+        # app_lifespan argument imports lifespan.py, which imports
+        # yolos_engine.py, which imports torch — at module-load time,
+        # before any test runs. The suite never exercises torch, but it
+        # can't even be COLLECTED without it being installed. cpu, not
+        # gpu, because CI never runs real inference — the CUDA wheels
+        # would only cost minutes of download for zero validation value.
+        run: uv sync --locked --group dev --extra cpu
+
+      - name: Run test suite
+        run: uv run pytest
+
+  # ---------------------------------------------------------------------
+  # Also gated only by lint — runs concurrently with `test`, not after it.
+  # ---------------------------------------------------------------------
+  docker-build:
+    name: Docker build validation
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        # No docker/setup-qemu-action here on purpose: GitHub's standard
+        # runner is already linux/amd64 natively, so building for
+        # linux/amd64 needs no emulation — unlike a cross-arch build on
+        # Apple Silicon, this costs nothing extra.
+
+      - name: Build production image (not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          # Loaded into the runner's local Docker daemon so the smoke
+          # test below can actually run it — never leaves this job.
+          load: true
+          tags: yolos-detection-api:ci
+          build-args: |
+            TORCH_BACKEND=cpu
+          # type=gha + mode=max: see Part 1. mode=max is what makes the
+          # BUILDER stage's expensive dependency layer cacheable at all
+          # for a multi-stage Dockerfile — omitting it silently caches
+          # only the final stage.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the built image
+        # A "does it compile" check alone would NOT have caught issue 7
+        # from the containerization step (fastapi run pointed at a file
+        # path that no longer existed after --no-editable) — that only
+        # fails when the container actually STARTS, not at build time.
+        # This runs the installed package's own app factory directly,
+        # without booting the real ASGI server or triggering a real
+        # model download (create_app() never awaits the lifespan — that
+        # only happens once an ASGI server processes the lifespan
+        # protocol) — so it's sub-second, but it does exercise every
+        # import in the routing table exactly the way the real CMD would.
+        run: docker run --rm yolos-detection-api:ci python -c "import backend.app; backend.app.create_app()"
