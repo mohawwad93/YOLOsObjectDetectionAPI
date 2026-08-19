@@ -1,8 +1,8 @@
 # app.py
-from pathlib import Path
 from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 
+from .config import get_settings
 from .lifespan import lifespan as production_lifespan
 from .api.routes import api_router
 
@@ -16,9 +16,8 @@ def create_app(app_lifespan=production_lifespan) -> FastAPI:
         lifespan=app_lifespan,
     )
     app.include_router(api_router, tags=["Computer Vision"])
-
-    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+    settings = get_settings()
+    app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
     return app
 
 app = create_app()

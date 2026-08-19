@@ -179,6 +179,12 @@ class Settings(BaseSettings):
     default_threshold: float = 0.5
     device_preference: str = "auto"   # auto | cpu | cuda | mps
     frame_queue_maxsize: int = 1
+    # Added in Phase 2, Step 4: local dev resolves this relative to cwd;
+    # the container sets APP_FRONTEND_DIR to an absolute path, since
+    # --no-editable installs mean there's no source tree relative to
+    # __file__ to compute a path from anymore. See
+    # PHASE_2_STEP_4_CONTAINERIZATION_GUIDE.md Part C.
+    frontend_dir: str = "src/frontend"
 
 @lru_cache
 def get_settings() -> Settings:
@@ -650,12 +656,20 @@ api_router.include_router(streaming_router)
 > lifespan context manager. See
 > [`PHASE_2_STEP_1_TESTING_GUIDE.md`](PHASE_2_STEP_1_TESTING_GUIDE.md) for the
 > full reasoning.
+>
+> **Updated again in Phase 2, Step 4.** The frontend static directory is now
+> read from `Settings.frontend_dir` instead of computed relative to
+> `__file__`. The container's `--no-editable` install means `backend` ships
+> as a standalone package with no source tree beside it — a `__file__`-relative
+> path silently pointed nowhere once that landed. See
+> [`PHASE_2_STEP_4_CONTAINERIZATION_GUIDE.md`](PHASE_2_STEP_4_CONTAINERIZATION_GUIDE.md)
+> Part C.
 
 ```python
-from pathlib import Path
 from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 
+from .config import get_settings
 from .lifespan import lifespan as production_lifespan
 from .api.routes import api_router
 
@@ -672,8 +686,8 @@ def create_app(app_lifespan=production_lifespan) -> FastAPI:
     )
     app.include_router(api_router, tags=["Computer Vision"])
 
-    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+    settings = get_settings()
+    app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
     return app
 
 app = create_app()

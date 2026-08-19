@@ -3,7 +3,7 @@ name = "yolos-detection-api"
 version = "0.2.0"
 description = "FastAPI object-detection service wrapping hustvl/yolos-tiny"
 readme = "README.md"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.12,<3.13"
 
 dependencies = [
     # fastapi[standard]: pulls in uvicorn[standard] (websockets — required
@@ -27,6 +27,13 @@ dependencies = [
 test = ["pytest>=9.1.1,<10", "pytest-asyncio>=1.4.0,<2", "httpx>=0.28.1,<1"]
 dev = [{ include-group = "test" }, "ruff>=0.16.3,<1"]
 
+[project.optional-dependencies]
+# Chosen explicitly at sync/build time — not derived from platform,
+# because "does this Linux box have a GPU" isn't something sys_platform
+# or platform_machine can express.
+cpu = ["torch>=2.5,<3"]
+gpu = ["torch>=2.5,<3 ; sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -35,9 +42,11 @@ build-backend = "hatchling.build"
 packages = ["src/backend"]
 
 [tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "gpu" }]]
 environments = [
-    "sys_platform == 'darwin' and platform_machine == 'arm64'",
-    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",   # native macOS dev — no Docker involved
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",   # PRODUCTION — the only platform ever deployed
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",  # native Docker builds on Apple Silicon — local dev convenience ONLY
 ]
 exclude-newer = "2026-08-16T00:00:00Z"
 
@@ -52,8 +61,7 @@ url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [tool.uv.sources]
-# Now reliable — torch is a direct dependency above, not a transitive one.
 torch = [
-    { index = "pytorch-cu126", marker = "sys_platform == 'linux'" },
-    { index = "pytorch-cpu", marker = "sys_platform == 'darwin'" },
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu126", extra = "gpu" },
 ]

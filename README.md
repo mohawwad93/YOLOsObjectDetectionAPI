@@ -5,7 +5,7 @@ both single-image detection (REST) and real-time detection over a video stream
 (WebSocket), served alongside a lightweight HTML/canvas frontend.
 
 This repository is mid-transformation from a working demo into an industry-grade,
-layered service. **This README covers the current, post–Phase 2 Step 3 state.**
+layered service. **This README covers the current, post–Phase 2 (complete) state.**
 For the reasoning behind the structure — and for a from-scratch walkthrough if
 you're onboarding or revisiting this later — see:
 
@@ -26,6 +26,11 @@ you're onboarding or revisiting this later — see:
   deterministic builds with `uv.lock`, dependency groups, cross-platform
   CUDA/CPU wheel routing in a single lockfile, and the full `pyproject.toml`
   reference.
+- [`docs/PHASE_2_STEP_4_CONTAINERIZATION_GUIDE.md`](docs/PHASE_2_STEP_4_CONTAINERIZATION_GUIDE.md) —
+  the multi-stage `Dockerfile`, build-cache mechanics, least-privilege
+  non-root setup, the worker-to-model memory math, and a full nine-issue
+  debugging narrative from actually shipping it (platform mismatches, the
+  CPU/GPU extras split, `HF_HOME` permissions, and more).
 
 ## Tech stack
 
@@ -36,6 +41,7 @@ you're onboarding or revisiting this later — see:
 | Model | Hugging Face `transformers` pipeline, `hustvl/yolos-tiny` |
 | Frontend | Static HTML + Canvas, no build step |
 | Config | `pydantic-settings` |
+| Container | Multi-stage Docker, non-root, CPU/GPU variants; see `docs/PHASE_2_STEP_4_CONTAINERIZATION_GUIDE.md` |
 
 ## Project structure
 
@@ -67,6 +73,11 @@ src/
 │       └── yolos_engine.py       # Concrete Hugging Face YOLOS implementation
 └── frontend/
     └── index.html
+
+Dockerfile                      # multi-stage: uv-managed build → non-root production image
+.dockerignore
+pyproject.toml
+uv.lock
 
 tests/
 ├── conftest.py              # shared fixtures — FakeDetectionEngine, app, client
@@ -103,14 +114,29 @@ uv run fastapi dev src/backend/app.py
 uv run pytest
 ```
 
-**Container / production** uses a different command — no reload, binds
-`0.0.0.0`, single process per container (scale via replica count, not
-`--workers`; see the guide above for why):
+**Container / production** is built as a multi-stage Docker image — not run
+via `uv run` at all. `--platform=linux/amd64` is mandatory on anything that
+might be pushed or deployed; `TORCH_BACKEND` selects the CPU or CUDA build of
+`torch` (see `docs/PHASE_2_STEP_3_DEPENDENCY_MANAGEMENT_GUIDE.md` and
+`docs/PHASE_2_STEP_4_CONTAINERIZATION_GUIDE.md`):
 
 ```bash
-uv sync --no-dev --frozen
-uv run fastapi run src/backend/app.py
+# Production (GPU) — the only combination ever pushed to a registry
+docker build --platform=linux/amd64 --build-arg TORCH_BACKEND=gpu -t yolos-detection-api:gpu .
+
+# CPU variant — CI runners, CPU-only tiers
+docker build --platform=linux/amd64 --build-arg TORCH_BACKEND=cpu -t yolos-detection-api:cpu .
+
+# Run
+docker run --platform=linux/amd64 -p 8000:8000 yolos-detection-api:gpu
 ```
+
+Inside the container, the process is started with `uvicorn backend.app:app`
+directly (not `fastapi run`) at a single worker per container — see the Step
+4 guide's debugging narrative for why each of those choices is load-bearing,
+not incidental. Apple Silicon developers building locally can add
+`--platform=linux/arm64` for a native, non-emulated build — but that image is
+for local iteration only and must never be pushed or deployed.
 
 ## Configuration
 
@@ -124,6 +150,7 @@ All environment-dependent values are read once at startup via `pydantic-settings
 | `APP_DEFAULT_THRESHOLD` | `0.5` | Default confidence threshold if not passed per request |
 | `APP_DEVICE_PREFERENCE` | `auto` | `auto` \| `cpu` \| `cuda` \| `mps` |
 | `APP_FRAME_QUEUE_MAXSIZE` | `1` | Backpressure queue size for the WebSocket stream |
+| `APP_FRONTEND_DIR` | `src/frontend` | Static frontend directory. Local dev resolves this relative to cwd; the container sets it to an absolute path (`/app/frontend`), since `--no-editable` means there's no source tree to compute a relative path from |
 
 Example `.env`:
 
@@ -210,4 +237,5 @@ for the full reasoning and file-by-file reference.
 - **Phase 2, Step 1 — Unit & Integration Testing:** complete. See the docs above.
 - **Phase 2, Step 2 — Operational Health, Liveness & Readiness:** complete. See the docs above.
 - **Phase 2, Step 3 — Reproducible Environments & Dependency Management:** complete. See the docs above.
-- **Phase 2, remaining steps — container build (Dockerfile):** not yet started.
+- **Phase 2, Step 4 — Production Containerization:** complete. See the docs above.
+- **Phase 2: complete.** Next up: Kubernetes manifests wiring the Step 2 probes and Step 4 image into an actual Deployment/Service.

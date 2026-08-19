@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     default_threshold: float = 0.5
     device_preference: str = "auto"   # auto | cpu | cuda | mps
     frame_queue_maxsize: int = 1
+    frontend_dir: str = "src/frontend"
 
 @lru_cache
 def get_settings() -> Settings:
