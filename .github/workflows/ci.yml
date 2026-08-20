@@ -4,9 +4,9 @@ name: CI
 on:
   workflow_dispatch: # This adds the "Run workflow" button with zero inputs
   pull_request:
-    branches: [main]
+    branches: [master]
   push:
-    branches: [main]
+    branches: [master]
 
 # Least-privilege for the workflow's own token — same principle as the
 # Dockerfile's non-root user, applied to CI's credentials. This workflow
