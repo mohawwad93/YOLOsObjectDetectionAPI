@@ -13,3 +13,18 @@ repos:
         entry: uv run ruff format
         language: system
         types: [python]
+
+      - id: pytest
+        name: pytest (via uv)
+        # Explicit --extra cpu --group dev, same reasoning as the CI
+        # test job: the app's import chain needs torch to even be
+        # collected, and cpu — not gpu — is all local/CI testing ever needs.
+        entry: uv run --extra cpu --group dev pytest
+        language: system
+        types: [ python ]
+        # Pre-commit's default behavior appends the list of changed
+        # files as arguments to `entry` — correct for ruff (lint just
+        # what changed), wrong for pytest (it would try to treat changed
+        # files as test-selection args). This runs the whole suite every
+        # time, matching what CI actually validates.
+        pass_filenames: false

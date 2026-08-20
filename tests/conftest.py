@@ -1,10 +1,12 @@
 import io
+from collections.abc import Generator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from PIL import Image
+from starlette.testclient import TestClient
 
 from backend.app import create_app
 from backend.dependencies import get_engine, get_engine_ws
@@ -73,6 +75,8 @@ def _make_test_lifespan(engine: FakeDetectionEngine):
     @asynccontextmanager
     async def _lifespan(app: FastAPI):
         app.state.engine = engine
+        app.state.active_sessions = set()
+        app.state.shutting_down = False
         yield
 
     return _lifespan
@@ -112,5 +116,21 @@ def app(fake_engine) -> FastAPI:
 
 
 @pytest.fixture
-def client(app) -> TestClient:
-    return TestClient(app)
+def client(app) -> Generator[TestClient, Any, None]:
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture
+def client_with_unready_engine() -> Generator[TestClient, Any, None]:
+    """
+    Deliberately provides NO override for get_engine. The `client` fixture
+    replaces get_engine's entire callable, which would silently bypass
+    this exact branch (overriding replaces the whole function, not just
+    patches its internals).
+    """
+    not_ready_engine = FakeDetectionEngine()
+    not_ready_engine._ready = False
+    app = create_app(app_lifespan=_make_test_lifespan(not_ready_engine))
+    with TestClient(app) as c:
+        yield c

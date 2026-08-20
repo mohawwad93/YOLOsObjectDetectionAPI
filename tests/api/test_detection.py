@@ -1,9 +1,3 @@
-from fastapi.testclient import TestClient
-
-from backend.app import create_app
-from tests.conftest import FakeDetectionEngine, _make_test_lifespan
-
-
 def test_post_detect_returns_fake_engine_results(client, sample_image_bytes):
     """
     Full request/response cycle through the real API layer, real
@@ -41,23 +35,15 @@ def test_post_detect_returns_422_for_corrupt_image_bytes(client):
     assert response.status_code == 422
 
 
-def test_detect_returns_503_when_the_real_engine_is_not_ready():
+def test_detect_returns_503_when_the_real_engine_is_not_ready(
+    client_with_unready_engine,
+):
     """
-    Deliberately does NOT use the `client` fixture, because that fixture
-    overrides get_engine entirely — which would skip the readiness check
-    we're trying to test (see §1: overriding replaces the whole callable,
-    not just its internals). Instead we let the real get_engine run
-    unmodified and control what it finds in app.state.
+    Uses the dedicated fixture rather than `client` — the `client` fixture's
+    full dependency override would silently skip get_engine's own 'not
+    ready' branch, which is exactly what this test needs to exercise.
     """
-    not_ready_engine = FakeDetectionEngine()
-    not_ready_engine._ready = False
-
-    app = create_app(app_lifespan=_make_test_lifespan(not_ready_engine))
-    # No dependency_overrides here — get_engine's real body executes.
-
-    with TestClient(app) as unready_client:
-        response = unready_client.post(
-            "/detect", files={"file": ("t.jpg", b"x", "image/jpeg")}
-        )
-
+    response = client_with_unready_engine.post(
+        "/detect", files={"file": ("t.jpg", b"x", "image/jpeg")}
+    )
     assert response.status_code == 503
