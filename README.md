@@ -31,6 +31,11 @@ you're onboarding or revisiting this later — see:
   non-root setup, the worker-to-model memory math, and a full nine-issue
   debugging narrative from actually shipping it (platform mismatches, the
   CPU/GPU extras split, `HF_HOME` permissions, and more).
+- [`docs/PHASE_3_STEP_1_CI_PIPELINE_GUIDE.md`](docs/PHASE_3_STEP_1_CI_PIPELINE_GUIDE.md) —
+  the GitHub Actions pipeline (lint → parallel test + Docker build
+  validation), the `pre-commit` pre-push hooks that mirror it locally, and a
+  ten-issue debugging narrative including two separate layers of the same
+  test-fixture bug.
 
 ## Tech stack
 
@@ -78,6 +83,11 @@ Dockerfile                      # multi-stage: uv-managed build → non-root pro
 .dockerignore
 pyproject.toml
 uv.lock
+Makefile                        # canonical sync/lint/test commands — see docs/PHASE_3_STEP_1
+.pre-commit-config.yaml         # pre-push hooks mirroring CI locally
+.github/
+└── workflows/
+    └── ci.yml                  # lint → (test ‖ docker-build) — see docs/PHASE_3_STEP_1
 
 tests/
 ├── conftest.py              # shared fixtures — FakeDetectionEngine, app, client
@@ -98,9 +108,14 @@ where. The `tests/` tree mirrors `src/backend/` on purpose — see
 ## Getting started
 
 ```bash
-# Install dependencies into a uv-managed virtual environment
-# (production deps + the `dev` group, which includes `test`)
-uv sync
+# The one canonical setup command — always installs the complete dev
+# environment (test tooling + the cpu torch build), never an incomplete
+# one. Prefer this over a bare `uv sync`.
+make sync
+
+# Enable the pre-push hooks once per clone — mirrors CI locally, in
+# seconds, before anything reaches GitHub
+pre-commit install --hook-type pre-push
 
 # Run the API locally, with autoreload
 # NOTE: binds 127.0.0.1 by design — local development only, never a
@@ -111,7 +126,10 @@ uv run fastapi dev src/backend/app.py
 # -> http://localhost:8000
 
 # Run the test suite (fast — no real model weights are ever loaded)
-uv run pytest
+make test
+
+# Check lint/format — matches CI exactly, changes nothing
+make lint
 ```
 
 **Container / production** is built as a multi-stage Docker image — not run
@@ -231,6 +249,15 @@ uv run pytest tests/api             # API layer, real routing + real service
 See [`docs/PHASE_2_STEP_1_TESTING_GUIDE.md`](docs/PHASE_2_STEP_1_TESTING_GUIDE.md)
 for the full reasoning and file-by-file reference.
 
+## Continuous Integration
+
+Every push and PR runs through an automated gatekeeper: `ruff` lint and
+format checks, the full `pytest` suite, and a real `docker build` of the
+production image (compiled and smoke-tested, never pushed) — the same
+checks a `pre-commit` pre-push hook runs locally first, in seconds. See
+[`docs/PHASE_3_STEP_1_CI_PIPELINE_GUIDE.md`](docs/PHASE_3_STEP_1_CI_PIPELINE_GUIDE.md)
+for the pipeline design and a full debugging narrative.
+
 ## Status
 
 - **Phase 1 — Code Architecture & Decoupling:** complete. See the docs above.
@@ -238,4 +265,6 @@ for the full reasoning and file-by-file reference.
 - **Phase 2, Step 2 — Operational Health, Liveness & Readiness:** complete. See the docs above.
 - **Phase 2, Step 3 — Reproducible Environments & Dependency Management:** complete. See the docs above.
 - **Phase 2, Step 4 — Production Containerization:** complete. See the docs above.
-- **Phase 2: complete.** Next up: Kubernetes manifests wiring the Step 2 probes and Step 4 image into an actual Deployment/Service.
+- **Phase 2: complete.**
+- **Phase 3, Step 1 — CI/CD Automation & Local Validation:** complete. See the docs above.
+- **Phase 3, remaining steps — Infrastructure as Code, secret management:** not yet started.

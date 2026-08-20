@@ -1,10 +1,15 @@
-.PHONY: sync test lint
+.PHONY: sync test lint lint-fix
 
 sync:
-	uv sync --locked --extra cpu
+	uv sync --locked --group dev --extra cpu
 
 test:
-	uv run pytest
+	uv run --extra cpu --group dev pytest
 
 lint:
-	uv run ruff check . --fix && uv run ruff format .
+	uv run ruff check .
+	uv run ruff format --check .
+
+lint-fix:
+	uv run ruff check --fix .
+	uv run ruff format .
