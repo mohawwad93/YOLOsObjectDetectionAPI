@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from ..schemas import LivenessResponse, ReadinessResponse
 from ...dependencies import get_engine_or_none
 from ...ml.base import DetectionEngine, EngineStatus
+from ..schemas import LivenessResponse, ReadinessResponse
 
 router = APIRouter()
 

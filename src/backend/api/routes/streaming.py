@@ -1,4 +1,5 @@
 import asyncio
+
 from fastapi import APIRouter, Depends, Query
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -8,6 +9,7 @@ from ...services.streaming_session import LatestFrameOnlyPolicy
 from ..schemas import DetectionOut
 
 router = APIRouter()
+
 
 @router.websocket("/ws/detect")
 async def websocket_detect(

@@ -141,7 +141,9 @@ class Settings(BaseSettings):
 def create_app(app_lifespan=production_lifespan) -> FastAPI:
     ...
     settings = get_settings()
-    app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
+    app.mount(
+        "/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend"
+    )
     return app
 ```
 

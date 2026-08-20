@@ -1,7 +1,10 @@
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
+
 from PIL import Image
+
 from .schemas import Detection
+
 
 class EngineStatus(StrEnum):
     """
@@ -10,6 +13,7 @@ class EngineStatus(StrEnum):
     'failed permanently, this pod will never become healthy' — and an
     orchestrator needs to treat those two cases very differently.
     """
+
     NOT_LOADED = "not_loaded"
     LOADING = "loading"
     READY = "ready"
@@ -24,11 +28,12 @@ class DetectionEngine(Protocol):
     Swapping frameworks later means writing a new class that satisfies
     this Protocol — nothing above this layer has to change.
     """
+
     def predict(self, image: Image.Image, threshold: float) -> list[Detection]: ...
 
     @property
     def status(self) -> EngineStatus: ...
-    
+
     @property
     def is_ready(self) -> bool:
         """Convenience for callers that only care about the binary

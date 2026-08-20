@@ -1,13 +1,17 @@
 from __future__ import annotations
+
 import logging
+
 import torch
 from PIL import Image, ImageDraw, ImageFont
-from transformers import pipeline, Pipeline
+from transformers import Pipeline, pipeline
 
 MODEL_NAME: str = "hustvl/yolos-tiny"
 DEFAULT_THRESHOLD: float = 0.5
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +29,9 @@ def load_object_detector(model_name: str = MODEL_NAME) -> Pipeline:
     return pipeline(task="object-detection", model=model_name, device=device)
 
 
-def detect_objects(detector, image: Image.Image, threshold: float = DEFAULT_THRESHOLD) -> list[dict]:
+def detect_objects(
+    detector, image: Image.Image, threshold: float = DEFAULT_THRESHOLD
+) -> list[dict]:
     raw_results: list[dict] = detector(image)
     filtered = [d for d in raw_results if d["score"] >= threshold]
     filtered.sort(key=lambda d: d["score"], reverse=True)

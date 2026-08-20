@@ -168,16 +168,18 @@ packages.
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
     """
     Every environment-dependent value lives here — never as a magic
     literal scattered through business or infra code.
     """
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="APP_")
 
     model_name: str = "hustvl/yolos-tiny"
     default_threshold: float = 0.5
-    device_preference: str = "auto"   # auto | cpu | cuda | mps
+    device_preference: str = "auto"  # auto | cpu | cuda | mps
     frame_queue_maxsize: int = 1
     # Added in Phase 2, Step 4: local dev resolves this relative to cwd;
     # the container sets APP_FRONTEND_DIR to an absolute path, since
@@ -185,6 +187,7 @@ class Settings(BaseSettings):
     # __file__ to compute a path from anymore. See
     # PHASE_2_STEP_4_CONTAINERIZATION_GUIDE.md Part C.
     frontend_dir: str = "src/frontend"
+
 
 @lru_cache
 def get_settings() -> Settings:
@@ -199,12 +202,15 @@ def get_settings() -> Settings:
 ```python
 from pydantic import BaseModel, Field
 
+
 class BoundingBox(BaseModel):
     """Domain value object. Pixel-space coordinates, always integers."""
+
     xmin: int
     ymin: int
     xmax: int
     ymax: int
+
 
 class Detection(BaseModel):
     """
@@ -212,6 +218,7 @@ class Detection(BaseModel):
     agnostic — it has no idea whether it'll end up as JSON, a WebSocket
     frame, or pixels drawn on an image. That indifference is the point.
     """
+
     label: str
     score: float = Field(ge=0.0, le=1.0)
     box: BoundingBox
@@ -224,6 +231,7 @@ from typing import Protocol, runtime_checkable
 from PIL import Image
 from .schemas import Detection
 
+
 @runtime_checkable
 class DetectionEngine(Protocol):
     """
@@ -232,6 +240,7 @@ class DetectionEngine(Protocol):
     Swapping frameworks later means writing a new class that satisfies
     this Protocol — nothing above this layer has to change.
     """
+
     def predict(self, image: Image.Image, threshold: float) -> list[Detection]: ...
 
     @property
@@ -249,12 +258,14 @@ from .schemas import BoundingBox, Detection
 
 logger = logging.getLogger(__name__)
 
+
 class YolosDetectionEngine:
     """
     Owns EVERYTHING infra-specific: device selection, loading, warmup,
     and translating raw HF output into our own Detection schema.
     Nothing outside this file needs to know it's HuggingFace/torch at all.
     """
+
     def __init__(self, model_name: str, device_preference: str = "auto") -> None:
         self._model_name = model_name
         self._device = self._resolve_device(device_preference)
@@ -307,9 +318,11 @@ from PIL import Image
 from ..ml.base import DetectionEngine
 from ..ml.schemas import Detection
 
+
 class InvalidImageError(Exception):
     """Domain error: input bytes aren't a decodable image.
     The API layer maps this to a 422 — the service doesn't know HTTP exists."""
+
 
 class DetectionService:
     """
@@ -320,10 +333,13 @@ class DetectionService:
     Depends on the DetectionEngine ABSTRACTION (injected), never a
     concrete model — testable with a fake engine in microseconds.
     """
+
     def __init__(self, engine: DetectionEngine):
         self._engine = engine
 
-    def detect_from_bytes(self, image_bytes: bytes, threshold: float) -> list[Detection]:
+    def detect_from_bytes(
+        self, image_bytes: bytes, threshold: float
+    ) -> list[Detection]:
         try:
             image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         except Exception as e:
@@ -341,6 +357,7 @@ from PIL import Image, ImageDraw, ImageFont
 from ..ml.schemas import Detection
 
 DEFAULT_FONT_SIZE = 16
+
 
 def draw_boxes(image: Image.Image, detections: list[Detection]) -> Image.Image:
     """
@@ -363,14 +380,19 @@ def draw_boxes(image: Image.Image, detections: list[Detection]) -> Image.Image:
         text_w, text_h = text_bbox[2] - text_bbox[0], text_bbox[3] - text_bbox[1]
         label_y = max(0, box.ymin - text_h - 4)
 
-        draw.rectangle([box.xmin, label_y, box.xmin + text_w + 4, label_y + text_h + 4], fill=color)
+        draw.rectangle(
+            [box.xmin, label_y, box.xmin + text_w + 4, label_y + text_h + 4], fill=color
+        )
         draw.text((box.xmin + 2, label_y + 2), label_text, fill="white", font=font)
 
     return annotated
 
+
 def _load_font() -> ImageFont.ImageFont:
     try:
-        return ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", DEFAULT_FONT_SIZE)
+        return ImageFont.truetype(
+            "/System/Library/Fonts/Helvetica.ttc", DEFAULT_FONT_SIZE
+        )
     except OSError:
         return ImageFont.load_default()
 ```
@@ -383,13 +405,17 @@ import asyncio
 from ..ml.schemas import Detection
 from .detection_service import DetectionService
 
+
 class LatestFrameOnlyPolicy:
     """
     'Always process the newest frame, drop anything older.' A business
     decision about live-detection behavior, not a transport detail —
     that's why it's testable with plain bytes and no network at all.
     """
-    def __init__(self, detection_service: DetectionService, threshold: float, maxsize: int = 1):
+
+    def __init__(
+        self, detection_service: DetectionService, threshold: float, maxsize: int = 1
+    ):
         self._service = detection_service
         self._threshold = threshold
         self._queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=maxsize)
@@ -428,9 +454,17 @@ class LatestFrameOnlyPolicy:
 > REST variant so there's still only one place that reads `app.state`.
 
 ```python
-from fastapi import Depends, HTTPException, Request, WebSocket, WebSocketException, status
+from fastapi import (
+    Depends,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketException,
+    status,
+)
 from .ml.base import DetectionEngine
 from .services.detection_service import DetectionService
+
 
 def _engine_from_app_state(app) -> DetectionEngine | None:
     # Shared lookup — the ONLY place either dependency touches app.state.
@@ -439,24 +473,36 @@ def _engine_from_app_state(app) -> DetectionEngine | None:
         return None
     return engine
 
+
 def get_engine(request: Request) -> DetectionEngine:
     """HTTP variant: translates 'not loaded' into a 503 response."""
     engine = _engine_from_app_state(request.app)
     if engine is None:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Model not loaded yet.")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Model not loaded yet."
+        )
     return engine
+
 
 async def get_engine_ws(websocket: WebSocket) -> DetectionEngine:
     """WS variant: same lookup, transport-appropriate error instead."""
     engine = _engine_from_app_state(websocket.app)
     if engine is None:
-        raise WebSocketException(code=status.WS_1013_TRY_AGAIN_LATER, reason="Model not loaded yet.")
+        raise WebSocketException(
+            code=status.WS_1013_TRY_AGAIN_LATER, reason="Model not loaded yet."
+        )
     return engine
 
-def get_detection_service(engine: DetectionEngine = Depends(get_engine)) -> DetectionService:
+
+def get_detection_service(
+    engine: DetectionEngine = Depends(get_engine),
+) -> DetectionService:
     return DetectionService(engine)
 
-def get_detection_service_ws(engine: DetectionEngine = Depends(get_engine_ws)) -> DetectionService:
+
+def get_detection_service_ws(
+    engine: DetectionEngine = Depends(get_engine_ws),
+) -> DetectionService:
     return DetectionService(engine)
 ```
 
@@ -468,12 +514,13 @@ from fastapi import FastAPI
 from .config import get_settings
 from .ml.yolos_engine import YolosDetectionEngine
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
     engine = YolosDetectionEngine(settings.model_name, settings.device_preference)
-    engine.load()               # heavy, exactly once per process
-    app.state.engine = engine   # typed, discoverable — not a bare dict
+    engine.load()  # heavy, exactly once per process
+    app.state.engine = engine  # typed, discoverable — not a bare dict
     yield
     # room here later for graceful shutdown: free GPU memory, close pools
 ```
@@ -495,15 +542,17 @@ async def lifespan(app: FastAPI):
 from pydantic import BaseModel
 from ..ml.schemas import Detection
 
+
 class BoundingBoxOut(BaseModel):
     xmin: int
     ymin: int
     xmax: int
     ymax: int
 
+
 class DetectionOut(BaseModel):
     label: str
-    confidence: float   # renamed from `score` — the whole point of this file existing
+    confidence: float  # renamed from `score` — the whole point of this file existing
     box: BoundingBoxOut
 
     @classmethod
@@ -514,13 +563,17 @@ class DetectionOut(BaseModel):
             box=BoundingBoxOut(**detection.box.model_dump()),
         )
 
+
 class DetectionResponse(BaseModel):
     count: int
     detections: list[DetectionOut]
 
     @classmethod
     def from_domain(cls, detections: list[Detection]) -> "DetectionResponse":
-        return cls(count=len(detections), detections=[DetectionOut.from_domain(d) for d in detections])
+        return cls(
+            count=len(detections),
+            detections=[DetectionOut.from_domain(d) for d in detections],
+        )
 ```
 
 ### `api/routes/detection.py`
@@ -538,7 +591,10 @@ from ..schemas import DetectionResponse
 
 router = APIRouter()
 
-@router.post("/detect", response_model=DetectionResponse, summary="Detect objects, returns JSON")
+
+@router.post(
+    "/detect", response_model=DetectionResponse, summary="Detect objects, returns JSON"
+)
 async def detect(
     file: UploadFile = File(...),
     threshold: float = Query(default=0.5, ge=0.0, le=1.0),
@@ -595,6 +651,7 @@ from ...services.streaming_session import LatestFrameOnlyPolicy
 from ..schemas import DetectionOut
 
 router = APIRouter()
+
 
 @router.websocket("/ws/detect")
 async def websocket_detect(
@@ -673,6 +730,7 @@ from .config import get_settings
 from .lifespan import lifespan as production_lifespan
 from .api.routes import api_router
 
+
 def create_app(app_lifespan=production_lifespan) -> FastAPI:
     # Factory instead of a bare module-level `app = FastAPI()` — lets
     # tests spin up a fresh app (fresh lifespan, fresh state) instead of
@@ -687,8 +745,11 @@ def create_app(app_lifespan=production_lifespan) -> FastAPI:
     app.include_router(api_router, tags=["Computer Vision"])
 
     settings = get_settings()
-    app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
+    app.mount(
+        "/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend"
+    )
     return app
+
 
 app = create_app()
 ```

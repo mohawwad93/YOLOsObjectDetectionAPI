@@ -1,7 +1,10 @@
 from __future__ import annotations
+
 import asyncio
+
 from ..ml.schemas import Detection
 from .detection_service import DetectionService
+
 
 class LatestFrameOnlyPolicy:
     """
@@ -9,7 +12,10 @@ class LatestFrameOnlyPolicy:
     decision about live-detection behavior, not a transport detail —
     that's why it's testable with plain bytes and no network at all.
     """
-    def __init__(self, detection_service: DetectionService, threshold: float, maxsize: int = 1):
+
+    def __init__(
+        self, detection_service: DetectionService, threshold: float, maxsize: int = 1
+    ):
         self._service = detection_service
         self._threshold = threshold
         self._queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=maxsize)

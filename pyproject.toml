@@ -25,7 +25,7 @@ dependencies = [
 
 [dependency-groups]
 test = ["pytest>=9.1.1,<10", "pytest-asyncio>=1.4.0,<2", "httpx>=0.28.1,<1"]
-dev = [{ include-group = "test" }, "ruff>=0.16.3,<1"]
+dev = [{ include-group = "test" }, "ruff>=0.16.3,<1", "pre-commit>=4.6.2,<5",]
 
 [project.optional-dependencies]
 # Chosen explicitly at sync/build time — not derived from platform,
@@ -64,4 +64,14 @@ explicit = true
 torch = [
     { index = "pytorch-cpu", extra = "cpu" },
     { index = "pytorch-cu126", extra = "gpu" },
+]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.params.Depends",
+    "fastapi.Query",
+    "fastapi.params.Query",
+    "fastapi.File",
+    "fastapi.params.File"
 ]

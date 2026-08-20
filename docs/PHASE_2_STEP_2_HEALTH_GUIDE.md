@@ -200,6 +200,7 @@ class EngineStatus(str, Enum):
     'failed permanently, this pod will never become healthy' — and an
     orchestrator needs to treat those two cases very differently.
     """
+
     NOT_LOADED = "not_loaded"
     LOADING = "loading"
     READY = "ready"
@@ -233,6 +234,7 @@ from .base import EngineStatus
 from .schemas import BoundingBox, Detection
 
 logger = logging.getLogger(__name__)
+
 
 class YolosDetectionEngine:
     def __init__(self, model_name: str, device_preference: str = "auto") -> None:
@@ -317,6 +319,7 @@ class YolosDetectionEngine:
 from fastapi import Request
 from .ml.base import DetectionEngine
 
+
 def get_engine_or_none(request: Request) -> DetectionEngine | None:
     """
     Used ONLY by /healthz and /readyz. The feature-route dependencies
@@ -341,10 +344,12 @@ from ..ml.schemas import Detection
 
 # ... DetectionOut / DetectionResponse unchanged from Phase 1 ...
 
+
 class LivenessResponse(BaseModel):
     """Deliberately its own vocabulary, separate from ml.base.EngineStatus
     — the same reason DetectionOut exists apart from Detection. Wire
     format is free to diverge from the domain model."""
+
     status: Literal["alive", "unhealthy"]
     reason: str | None = None
 
@@ -440,8 +445,10 @@ async def lifespan(app: FastAPI):
     # never half-populated, and /healthz + /readyz are both meaningful
     # from the first millisecond of the process's life.
     app.state.engine = engine
-    app.state.active_sessions = set()   # open WebSockets — see graceful shutdown
-    app.state.shutting_down = False     # readyz consults this independently of engine.status
+    app.state.active_sessions = set()  # open WebSockets — see graceful shutdown
+    app.state.shutting_down = (
+        False  # readyz consults this independently of engine.status
+    )
 
     # Fire-and-forget: NOT awaited here. This is what lets the server
     # start accepting connections immediately below, instead of the
@@ -452,7 +459,7 @@ async def lifespan(app: FastAPI):
 
     # ---------------- Shutdown path (triggered by SIGTERM) ----------------
     logger.info("Shutdown: marking not-ready, no longer accepting new work")
-    app.state.shutting_down = True   # readyz flips to 503 on the very next probe
+    app.state.shutting_down = True  # readyz flips to 503 on the very next probe
 
     if not load_task.done():
         load_task.cancel()  # loading never finished — no point continuing it
@@ -495,7 +502,9 @@ async def _drain_active_sessions(sessions: set) -> None:
             pass  # already gone — nothing to clean up
 
     pending = [asyncio.create_task(_close_one(ws)) for ws in list(sessions)]
-    _, still_pending = await asyncio.wait(pending, timeout=SHUTDOWN_GRACE_PERIOD_SECONDS)
+    _, still_pending = await asyncio.wait(
+        pending, timeout=SHUTDOWN_GRACE_PERIOD_SECONDS
+    )
     for task in still_pending:
         task.cancel()  # grace period elapsed — force it, SIGKILL is coming regardless
 ```
@@ -543,7 +552,7 @@ from .streaming import router as streaming_router
 from .health import router as health_router
 
 api_router = APIRouter()
-api_router.include_router(health_router)      # no prefix — /healthz, /readyz at root
+api_router.include_router(health_router)  # no prefix — /healthz, /readyz at root
 api_router.include_router(detection_router)
 api_router.include_router(streaming_router)
 ```

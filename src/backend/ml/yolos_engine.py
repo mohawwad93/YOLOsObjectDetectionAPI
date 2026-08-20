@@ -1,12 +1,14 @@
 import logging
+
 import torch
 from PIL import Image
-from transformers import pipeline, Pipeline
+from transformers import Pipeline, pipeline
 
 from .base import EngineStatus
 from .schemas import BoundingBox, Detection
 
 logger = logging.getLogger(__name__)
+
 
 class YolosDetectionEngine:
     """
@@ -14,6 +16,7 @@ class YolosDetectionEngine:
     and translating raw HF output into our own Detection schema.
     Nothing outside this file needs to know it's HuggingFace/torch at all.
     """
+
     def __init__(self, model_name: str, device_preference: str = "auto") -> None:
         self._model_name = model_name
         self._device = self._resolve_device(device_preference)

@@ -1,14 +1,16 @@
 import asyncio
+
 import pytest
 
 from backend.services.detection_service import DetectionService
 from backend.services.streaming_session import LatestFrameOnlyPolicy
 
-
 pytestmark = pytest.mark.asyncio
 
 
-async def test_keeps_only_latest_frame_under_backpressure(fake_engine, sample_image_bytes):
+async def test_keeps_only_latest_frame_under_backpressure(
+    fake_engine, sample_image_bytes
+):
     """
     The core policy claim: with maxsize=1, submitting three frames
     before ever draining the queue must leave only the LAST one behind.
@@ -32,7 +34,9 @@ async def test_keeps_only_latest_frame_under_backpressure(fake_engine, sample_im
         session._queue.get_nowait()
 
 
-async def test_submit_never_blocks_even_under_sustained_load(fake_engine, sample_image_bytes):
+async def test_submit_never_blocks_even_under_sustained_load(
+    fake_engine, sample_image_bytes
+):
     """
     Regression guard for the exact failure mode backpressure exists to
     prevent: a slow/absent consumer must never make the producer (the
@@ -50,14 +54,18 @@ async def test_submit_never_blocks_even_under_sustained_load(fake_engine, sample
     await asyncio.wait_for(submit_many(), timeout=1.0)
 
 
-async def test_next_result_delegates_to_detection_service(fake_engine, sample_image_bytes):
+async def test_next_result_delegates_to_detection_service(
+    fake_engine, sample_image_bytes
+):
     """
     Confirms the policy actually calls through to DetectionService rather
     than reimplementing inference glue itself — the whole reason these
     are two separate classes with two separate responsibilities.
     """
     service = DetectionService(fake_engine)
-    session = LatestFrameOnlyPolicy(service, threshold=0.0)  # low enough that filtering isn't in play here
+    session = LatestFrameOnlyPolicy(
+        service, threshold=0.0
+    )  # low enough that filtering isn't in play here
 
     await session.submit_frame(sample_image_bytes)
     detections = await session.next_result()

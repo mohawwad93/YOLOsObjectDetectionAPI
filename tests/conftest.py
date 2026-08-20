@@ -26,10 +26,22 @@ class FakeDetectionEngine:
 
     def __init__(self, canned_detections: list[Detection] | None = None):
         self._ready = True
-        self._canned = canned_detections if canned_detections is not None else [
-            Detection(label="cat", score=0.91, box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100)),
-            Detection(label="dog", score=0.42, box=BoundingBox(xmin=150, ymin=20, xmax=260, ymax=180)),
-        ]
+        self._canned = (
+            canned_detections
+            if canned_detections is not None
+            else [
+                Detection(
+                    label="cat",
+                    score=0.91,
+                    box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100),
+                ),
+                Detection(
+                    label="dog",
+                    score=0.42,
+                    box=BoundingBox(xmin=150, ymin=20, xmax=260, ymax=180),
+                ),
+            ]
+        )
 
     @property
     def status(self) -> EngineStatus:
@@ -57,10 +69,12 @@ def _make_test_lifespan(engine: FakeDetectionEngine):
     1's app.py already takes `lifespan` as a factory parameter (for this
     exact reason), so swapping it here costs us nothing.
     """
+
     @asynccontextmanager
     async def _lifespan(app: FastAPI):
         app.state.engine = engine
         yield
+
     return _lifespan
 
 

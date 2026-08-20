@@ -1,16 +1,20 @@
 import io
+
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from PIL import Image
 
 from ...dependencies import get_detection_service
-from ...services.detection_service import DetectionService, InvalidImageError
 from ...services.annotation import draw_boxes
+from ...services.detection_service import DetectionService, InvalidImageError
 from ..schemas import DetectionResponse
 
 router = APIRouter()
 
-@router.post("/detect", response_model=DetectionResponse, summary="Detect objects, returns JSON")
+
+@router.post(
+    "/detect", response_model=DetectionResponse, summary="Detect objects, returns JSON"
+)
 async def detect(
     file: UploadFile = File(...),
     threshold: float = Query(default=0.5, ge=0.0, le=1.0),

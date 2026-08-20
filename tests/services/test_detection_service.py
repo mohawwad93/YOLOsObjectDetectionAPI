@@ -1,8 +1,11 @@
 import pytest
+
 from backend.services.detection_service import DetectionService, InvalidImageError
 
 
-def test_detections_are_sorted_by_confidence_descending(fake_engine, sample_image_bytes):
+def test_detections_are_sorted_by_confidence_descending(
+    fake_engine, sample_image_bytes
+):
     """Verifies DetectionService's own contribution — sorting — independent
     of whatever order the engine happens to return results in."""
     service = DetectionService(fake_engine)

@@ -223,15 +223,27 @@ class FakeDetectionEngine:
 
     def __init__(self, canned_detections: list[Detection] | None = None):
         self._ready = True
-        self._canned = canned_detections if canned_detections is not None else [
-            # high confidence — survives any threshold <= 0.91
-            Detection(label="cat", score=0.91, box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100)),
-            # low confidence — survives only threshold <= 0.42. Documented
-            # here deliberately: a test author choosing a threshold has to
-            # know this boundary, and we got bitten once by not checking it
-            # (see Part E) — so now it's written down at the source.
-            Detection(label="dog", score=0.42, box=BoundingBox(xmin=150, ymin=20, xmax=260, ymax=180)),
-        ]
+        self._canned = (
+            canned_detections
+            if canned_detections is not None
+            else [
+                # high confidence — survives any threshold <= 0.91
+                Detection(
+                    label="cat",
+                    score=0.91,
+                    box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100),
+                ),
+                # low confidence — survives only threshold <= 0.42. Documented
+                # here deliberately: a test author choosing a threshold has to
+                # know this boundary, and we got bitten once by not checking it
+                # (see Part E) — so now it's written down at the source.
+                Detection(
+                    label="dog",
+                    score=0.42,
+                    box=BoundingBox(xmin=150, ymin=20, xmax=260, ymax=180),
+                ),
+            ]
+        )
 
     @property
     def status(self) -> EngineStatus:
@@ -259,10 +271,12 @@ def _make_test_lifespan(engine: FakeDetectionEngine):
     1's app.py takes `lifespan` as a factory parameter for exactly this
     reason, so swapping it here costs nothing.
     """
+
     @asynccontextmanager
     async def _lifespan(app: FastAPI):
         app.state.engine = engine
         yield
+
     return _lifespan
 
 
@@ -334,7 +348,9 @@ from backend.services.streaming_session import LatestFrameOnlyPolicy
 pytestmark = pytest.mark.asyncio
 
 
-async def test_keeps_only_latest_frame_under_backpressure(fake_engine, sample_image_bytes):
+async def test_keeps_only_latest_frame_under_backpressure(
+    fake_engine, sample_image_bytes
+):
     """
     The core policy claim: with maxsize=1, submitting three frames before
     ever draining the queue must leave only the LAST one behind. Proved
@@ -355,7 +371,9 @@ async def test_keeps_only_latest_frame_under_backpressure(fake_engine, sample_im
         session._queue.get_nowait()
 
 
-async def test_submit_never_blocks_even_under_sustained_load(fake_engine, sample_image_bytes):
+async def test_submit_never_blocks_even_under_sustained_load(
+    fake_engine, sample_image_bytes
+):
     """
     Regression guard for the exact failure mode backpressure exists to
     prevent: a slow/absent consumer must never make the producer (the
@@ -373,7 +391,9 @@ async def test_submit_never_blocks_even_under_sustained_load(fake_engine, sample
     await asyncio.wait_for(submit_many(), timeout=1.0)
 
 
-async def test_next_result_delegates_to_detection_service(fake_engine, sample_image_bytes):
+async def test_next_result_delegates_to_detection_service(
+    fake_engine, sample_image_bytes
+):
     """
     Confirms the policy actually calls through to DetectionService rather
     than reimplementing inference glue itself.
@@ -412,7 +432,9 @@ import pytest
 from backend.services.detection_service import DetectionService, InvalidImageError
 
 
-def test_detections_are_sorted_by_confidence_descending(fake_engine, sample_image_bytes):
+def test_detections_are_sorted_by_confidence_descending(
+    fake_engine, sample_image_bytes
+):
     """Verifies DetectionService's own contribution — sorting — independent
     of whatever order the engine happens to return results in."""
     service = DetectionService(fake_engine)
@@ -451,7 +473,13 @@ def test_returns_a_new_image_of_the_same_size():
     """The annotated image must be a distinct copy — callers should never
     find their original image mutated as a side effect."""
     original = Image.new("RGB", (300, 200), color="white")
-    detections = [Detection(label="cat", score=0.9, box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100))]
+    detections = [
+        Detection(
+            label="cat",
+            score=0.9,
+            box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100),
+        )
+    ]
 
     annotated = draw_boxes(original, detections)
 
@@ -465,7 +493,13 @@ def test_something_is_actually_drawn():
     differ from background — without coupling the test to exact colors
     or font rendering, which vary across environments."""
     original = Image.new("RGB", (300, 200), color="white")
-    detections = [Detection(label="cat", score=0.9, box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100))]
+    detections = [
+        Detection(
+            label="cat",
+            score=0.9,
+            box=BoundingBox(xmin=10, ymin=10, xmax=100, ymax=100),
+        )
+    ]
 
     annotated = draw_boxes(original, detections)
     assert annotated.getpixel((10, 50)) != (255, 255, 255)
@@ -500,16 +534,22 @@ def test_post_detect_returns_fake_engine_results(client, sample_image_bytes):
     body = response.json()
     assert body["count"] == 2
     assert body["detections"][0]["label"] == "cat"
-    assert "confidence" in body["detections"][0]  # confirms score->confidence reached the wire
+    assert (
+        "confidence" in body["detections"][0]
+    )  # confirms score->confidence reached the wire
 
 
 def test_post_detect_rejects_non_image_content_type(client):
-    response = client.post("/detect", files={"file": ("test.txt", b"hello", "text/plain")})
+    response = client.post(
+        "/detect", files={"file": ("test.txt", b"hello", "text/plain")}
+    )
     assert response.status_code == 400
 
 
 def test_post_detect_returns_422_for_corrupt_image_bytes(client):
-    response = client.post("/detect", files={"file": ("test.jpg", b"not a jpeg", "image/jpeg")})
+    response = client.post(
+        "/detect", files={"file": ("test.jpg", b"not a jpeg", "image/jpeg")}
+    )
     assert response.status_code == 422
 
 
@@ -523,13 +563,17 @@ def test_post_detect_image_returns_a_jpeg(client, sample_image_bytes):
     assert response.headers["content-type"] == "image/jpeg"
 
 
-def test_detect_returns_503_when_the_real_engine_is_not_ready(client_with_unready_engine):
+def test_detect_returns_503_when_the_real_engine_is_not_ready(
+    client_with_unready_engine,
+):
     """
     Uses the dedicated fixture rather than `client` — see conftest.py and
     Part A for why `client`'s full dependency override would silently
     bypass this exact branch.
     """
-    response = client_with_unready_engine.post("/detect", files={"file": ("t.jpg", b"x", "image/jpeg")})
+    response = client_with_unready_engine.post(
+        "/detect", files={"file": ("t.jpg", b"x", "image/jpeg")}
+    )
     assert response.status_code == 503
 ```
 
@@ -591,8 +635,7 @@ Hugging Face API or model-behavior change — give it its own marker:
 
 ```python
 @pytest.mark.slow
-def test_real_yolos_engine_detects_a_known_image():
-    ...
+def test_real_yolos_engine_detects_a_known_image(): ...
 ```
 
 and exclude it from the default run (`pytest -m "not slow"`), reserving it for

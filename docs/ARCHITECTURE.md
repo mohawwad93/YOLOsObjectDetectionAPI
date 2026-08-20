@@ -133,8 +133,7 @@ and FastAPI calls it and hands you the return value as a parameter.
 @router.post("/detect")
 async def detect(
     service: DetectionService = Depends(get_detection_service),
-):
-    ...
+): ...
 ```
 
 ### Why this matters specifically for ML workloads
