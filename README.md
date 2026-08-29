@@ -36,6 +36,11 @@ you're onboarding or revisiting this later — see:
   validation), the `pre-commit` pre-push hooks that mirror it locally, and a
   ten-issue debugging narrative including two separate layers of the same
   test-fixture bug.
+- [`docs/PHASE_3_STEP_2_CLOUD_RUN_DEPLOYMENT_GUIDE.md`](docs/PHASE_3_STEP_2_CLOUD_RUN_DEPLOYMENT_GUIDE.md) —
+  the manual Cloud Run deployment: scale-to-zero mechanics, mapping
+  `/readyz`/`/healthz` onto Cloud Run's native probes, a full per-service
+  pricing assessment for the $0/month Always Free setup, the complete
+  runbook, and the GHCR caching-proxy issue hit along the way.
 
 ## Tech stack
 
@@ -249,6 +254,18 @@ uv run pytest tests/api             # API layer, real routing + real service
 See [`docs/PHASE_2_STEP_1_TESTING_GUIDE.md`](docs/PHASE_2_STEP_1_TESTING_GUIDE.md)
 for the full reasoning and file-by-file reference.
 
+## Deployment
+
+Live on Google Cloud Run's Always Free tier (`us-central1`), deployed
+manually from a public GitHub Container Registry image, `min-instances=0`
+(scale-to-zero — cold starts are an accepted, transparent trade-off for
+$0/month at showcase traffic). Cloud Run's native startup and liveness
+probes are pointed directly at this project's own `/readyz` and `/healthz`.
+See
+[`docs/PHASE_3_STEP_2_CLOUD_RUN_DEPLOYMENT_GUIDE.md`](docs/PHASE_3_STEP_2_CLOUD_RUN_DEPLOYMENT_GUIDE.md)
+for the full pricing assessment, the runbook, and the deployment issue
+resolved along the way.
+
 ## Continuous Integration
 
 Every push and PR runs through an automated gatekeeper: `ruff` lint and
@@ -267,4 +284,5 @@ for the pipeline design and a full debugging narrative.
 - **Phase 2, Step 4 — Production Containerization:** complete. See the docs above.
 - **Phase 2: complete.**
 - **Phase 3, Step 1 — CI/CD Automation & Local Validation:** complete. See the docs above.
-- **Phase 3, remaining steps — Infrastructure as Code, secret management:** not yet started.
+- **Phase 3, Step 2 — Manual Proof-of-Concept Deployment to Cloud Run:** complete. Live on the Always Free tier at $0/month. See the docs above.
+- **Phase 3, remaining steps — Infrastructure as Code (codifying this manual deployment), secret management:** not yet started.
