@@ -44,6 +44,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # =============================================================================
 FROM python:3.12-slim-bookworm AS production
 
+# Links this image to its source repo on GHCR automatically — the
+# package only inherits repo Actions permissions if this is present
+# BEFORE the first publish. Doesn't retroactively fix an existing
+# package (that's what the one-time Manage Actions access step is
+# for), but prevents this exact issue for anything published fresh.
+LABEL org.opencontainers.image.source="https://github.com/mohawwad93/YOLOsObjectDetectionAPI"
+
 # Least-privilege: dedicated, unprivileged system user with a FIXED
 # numeric UID/GID — what Kubernetes' runAsNonRoot/runAsUser securityContext
 # checks actually compare against, independent of name resolution.
