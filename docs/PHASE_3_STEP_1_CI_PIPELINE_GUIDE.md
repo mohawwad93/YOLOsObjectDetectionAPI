@@ -232,6 +232,7 @@ def _make_test_lifespan(engine: FakeDetectionEngine):
         app.state.active_sessions = set()
         app.state.shutting_down = False
         yield
+
     return _lifespan
 
 
@@ -248,10 +249,14 @@ def client(app) -> TestClient:
 ### `tests/api/test_detection.py` — the fixture-based rewrite
 
 ```python
-def test_detect_returns_503_when_the_real_engine_is_not_ready(client_with_unready_engine):
+def test_detect_returns_503_when_the_real_engine_is_not_ready(
+    client_with_unready_engine,
+):
     """Uses the dedicated fixture — no import needed, pytest injects it
     automatically from conftest.py regardless of subfolder depth."""
-    response = client_with_unready_engine.post("/detect", files={"file": ("t.jpg", b"x", "image/jpeg")})
+    response = client_with_unready_engine.post(
+        "/detect", files={"file": ("t.jpg", b"x", "image/jpeg")}
+    )
     assert response.status_code == 503
 ```
 
