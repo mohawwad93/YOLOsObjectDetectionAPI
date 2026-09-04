@@ -41,6 +41,12 @@ you're onboarding or revisiting this later — see:
   `/readyz`/`/healthz` onto Cloud Run's native probes, a full per-service
   pricing assessment for the $0/month Always Free setup, the complete
   runbook, and the GHCR caching-proxy issue hit along the way.
+- [`docs/PHASE_3_STEP_3_IAC_CD_GUIDE.md`](docs/PHASE_3_STEP_3_IAC_CD_GUIDE.md) —
+  Terraform declaring the Cloud Run service, a GitOps CD pipeline
+  authenticating to GCP via OIDC with no static keys, Google Secret Manager
+  for this project's first real secret, and a ten-issue debugging narrative
+  including a full architectural reversal (API enablement pulled back out
+  of Terraform after repeated permission failures made the case for it).
 
 ## Tech stack
 
@@ -256,15 +262,19 @@ for the full reasoning and file-by-file reference.
 
 ## Deployment
 
-Live on Google Cloud Run's Always Free tier (`us-central1`), deployed
-manually from a public GitHub Container Registry image, `min-instances=0`
-(scale-to-zero — cold starts are an accepted, transparent trade-off for
-$0/month at showcase traffic). Cloud Run's native startup and liveness
-probes are pointed directly at this project's own `/readyz` and `/healthz`.
-See
+Live on Google Cloud Run's Always Free tier (`us-central1`), deployed via
+Terraform and an automated GitOps pipeline — merge to `master` builds and
+pushes an immutable, git-SHA-tagged image to GHCR, authenticates to GCP
+with OpenID Connect (no static keys), and runs `terraform apply`.
+`min-instances=0` (scale-to-zero — cold starts are an accepted, transparent
+trade-off for $0/month at showcase traffic). Cloud Run's native startup and
+liveness probes are pointed directly at this project's own `/readyz` and
+`/healthz`. Hugging Face Hub access is authenticated via a token in Google
+Secret Manager — this project's first real secret. See
+[`docs/PHASE_3_STEP_3_IAC_CD_GUIDE.md`](docs/PHASE_3_STEP_3_IAC_CD_GUIDE.md)
+for the complete Terraform/CD reference, and
 [`docs/PHASE_3_STEP_2_CLOUD_RUN_DEPLOYMENT_GUIDE.md`](docs/PHASE_3_STEP_2_CLOUD_RUN_DEPLOYMENT_GUIDE.md)
-for the full pricing assessment, the runbook, and the deployment issue
-resolved along the way.
+for the original manual proof-of-concept this automates.
 
 ## Continuous Integration
 
@@ -285,4 +295,5 @@ for the pipeline design and a full debugging narrative.
 - **Phase 2: complete.**
 - **Phase 3, Step 1 — CI/CD Automation & Local Validation:** complete. See the docs above.
 - **Phase 3, Step 2 — Manual Proof-of-Concept Deployment to Cloud Run:** complete. Live on the Always Free tier at $0/month. See the docs above.
-- **Phase 3, remaining steps — Infrastructure as Code (codifying this manual deployment), secret management:** not yet started.
+- **Phase 3, Step 3 — Infrastructure as Code & GitOps Continuous Deployment:** complete. Terraform + automated CD live. See the docs above.
+- **Phase 3: complete.** See `docs/PHASE_3_STEP_3_IAC_CD_GUIDE.md` Part F for suggested next-level improvements (PR-based `terraform plan` review, tighter IAM scoping, baking the model into the image).

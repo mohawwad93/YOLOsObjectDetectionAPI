@@ -1,3 +1,12 @@
+gcloud services enable \
+  run.googleapis.com \
+  iam.googleapis.com \
+  iamcredentials.googleapis.com \
+  secretmanager.googleapis.com \
+  storage.googleapis.com \
+  cloudresourcemanager.googleapis.com \
+  --project=ml-project-506908
+
 # A dedicated service account for GitHub Actions to impersonate —
 # never a human's own credentials, never a static key.
 gcloud iam service-accounts create github-actions-deployer \
@@ -37,15 +46,6 @@ gcloud iam service-accounts add-iam-policy-binding \
   "github-actions-deployer@ml-project-506908.iam.gserviceaccount.com" \
   --role="roles/iam.workloadIdentityUser" \
   --member="principalSet://iam.googleapis.com/projects/494443276988/locations/global/workloadIdentityPools/github-pool/attribute.repository/mohawwad93/YOLOsObjectDetectionAPI"
-
-gcloud services enable \
-  run.googleapis.com \
-  iam.googleapis.com \
-  iamcredentials.googleapis.com \
-  secretmanager.googleapis.com \
-  storage.googleapis.com \
-  cloudresourcemanager.googleapis.com \
-  --project=ml-project-506908
 
 # The deployer identity needs to manage Secret Manager resources too,
 # since Terraform runs AS this service account
