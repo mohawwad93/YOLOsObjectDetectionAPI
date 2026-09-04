@@ -69,6 +69,8 @@ jobs:
 
       - name: Terraform apply
         working-directory: infra
+        env:
+          TF_VAR_hf_token: ${{ secrets.HF_TOKEN }}
         run: |
           terraform apply -auto-approve \
             -var="project_id=ml-project-506908" \

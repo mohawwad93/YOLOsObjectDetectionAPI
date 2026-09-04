@@ -38,6 +38,16 @@ gcloud iam service-accounts add-iam-policy-binding \
   --role="roles/iam.workloadIdentityUser" \
   --member="principalSet://iam.googleapis.com/projects/494443276988/locations/global/workloadIdentityPools/github-pool/attribute.repository/mohawwad93/YOLOsObjectDetectionAPI"
 
+gcloud services enable iamcredentials.googleapis.com --project=ml-project-506908
+
+gcloud services enable secretmanager.googleapis.com --project=ml-project-506908
+
+# The deployer identity needs to manage Secret Manager resources too,
+# since Terraform runs AS this service account
+gcloud projects add-iam-policy-binding ml-project-506908 \
+  --member="serviceAccount:github-actions-deployer@ml-project-506908.iam.gserviceaccount.com" \
+  --role="roles/secretmanager.admin"
+
 # The state bucket — bootstrap only, never managed by main.tf itself
 gsutil mb -l us-central1 gs://yolos-objectdetection-api-tfstate
 gsutil versioning set on gs://yolos-objectdetection-api-tfstate

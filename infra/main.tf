@@ -51,8 +51,19 @@ resource "google_cloud_run_v2_service" "api" {
   deletion_protection = true
 
   template {
+    service_account = google_service_account.cloud_run_runtime.email
     containers {
       image = var.container_image
+
+      env {
+        name = "HF_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.hf_token.secret_id
+            version = "latest"
+          }
+        }
+      }
 
       ports {
         container_port = 8000
@@ -105,6 +116,8 @@ resource "google_cloud_run_v2_service" "api" {
     timeout = "300s" # generous, for /ws/detect's long-lived WebSocket sessions
   }
 
+  depends_on = [google_secret_manager_secret_version.hf_token]
+
   traffic {
     type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
     percent = 100
@@ -124,4 +137,49 @@ resource "google_cloud_run_v2_service_iam_member" "public_access" {
 output "service_url" {
   value       = google_cloud_run_v2_service.api.uri
   description = "The live URL of the deployed service"
+}
+
+# Added after a real production incident: anonymous huggingface.co
+# requests share Cloud Run's egress IP pool with many other GCP
+# tenants and got rate-limited (429) during a cold start — which our
+# own fail-fast engine.load() correctly caught and reported via
+# /readyz. This fixes the actual cause, not the symptom.
+resource "google_secret_manager_secret" "hf_token" {
+  secret_id = "hf-token"
+  replication {
+    auto {}
+  }
+}
+
+variable "hf_token" {
+  type        = string
+  description = "Hugging Face Hub access token — read scope is sufficient"
+  sensitive   = true
+}
+
+# Worth being precise about what this does and doesn't protect: this
+# value DOES land in Terraform state for this specific resource, in
+# plaintext — this isn't "secrets that never touch state," it's why
+# the state file's own security (the GCS backend, restricted IAM,
+# versioning) from earlier in this step matters as much as it does.
+# What Secret Manager actually buys: access-controlled runtime
+# injection, rotation, and audit logging — never hardcoded in a .tf
+# file, never committed, never visible in a docker inspect.
+resource "google_secret_manager_secret_version" "hf_token" {
+  secret      = google_secret_manager_secret.hf_token.id
+  secret_data = var.hf_token
+}
+
+# A dedicated RUNTIME identity for the service itself — distinct from
+# github-actions-deployer, which only ever deploys it. Least privilege:
+# this identity can read exactly one secret and nothing else.
+resource "google_service_account" "cloud_run_runtime" {
+  account_id   = "yolos-api-runtime"
+  display_name = "yolos-detection-api Cloud Run runtime identity"
+}
+
+resource "google_secret_manager_secret_iam_member" "hf_token_access" {
+  secret_id = google_secret_manager_secret.hf_token.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.cloud_run_runtime.email}"
 }
