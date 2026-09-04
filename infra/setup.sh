@@ -53,6 +53,10 @@ gcloud projects add-iam-policy-binding ml-project-506908 \
   --member="serviceAccount:github-actions-deployer@ml-project-506908.iam.gserviceaccount.com" \
   --role="roles/secretmanager.admin"
 
+gcloud projects add-iam-policy-binding ml-project-506908 \
+  --member="serviceAccount:github-actions-deployer@ml-project-506908.iam.gserviceaccount.com" \
+  --role="roles/iam.serviceAccountAdmin"
+
 # The state bucket — bootstrap only, never managed by main.tf itself
 gsutil mb -l us-central1 gs://yolos-objectdetection-api-tfstate
 gsutil versioning set on gs://yolos-objectdetection-api-tfstate
