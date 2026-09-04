@@ -41,27 +41,6 @@ variable "hf_token" {
 }
 
 # ----------------------------------------------------------------------
-# APIs this project's infrastructure depends on — declared as code.
-# ----------------------------------------------------------------------
-locals {
-  required_apis = [
-    "run.googleapis.com",
-    "iam.googleapis.com",
-    "iamcredentials.googleapis.com",
-    "secretmanager.googleapis.com",
-    "storage.googleapis.com",
-    "cloudresourcemanager.googleapis.com",
-  ]
-}
-
-resource "google_project_service" "required" {
-  for_each           = toset(local.required_apis)
-  project            = var.project_id
-  service            = each.value
-  disable_on_destroy = false
-}
-
-# ----------------------------------------------------------------------
 # Secret Manager: Hugging Face Hub token
 # ----------------------------------------------------------------------
 resource "google_secret_manager_secret" "hf_token" {
@@ -70,11 +49,6 @@ resource "google_secret_manager_secret" "hf_token" {
   replication {
     auto {}
   }
-
-  # <-- ADDED. This resource needs secretmanager.googleapis.com turned
-  # on before it can be created. Waits for the whole API-enablement
-  # block above to finish first.
-  depends_on = [google_project_service.required]
 }
 
 resource "google_secret_manager_secret_version" "hf_token" {
@@ -88,8 +62,6 @@ resource "google_secret_manager_secret_version" "hf_token" {
 resource "google_service_account" "cloud_run_runtime" {
   account_id   = "yolos-api-runtime"
   display_name = "yolos-detection-api Cloud Run runtime identity"
-
-  depends_on = [google_project_service.required]
 }
 
 resource "google_secret_manager_secret_iam_member" "hf_token_access" {
@@ -175,7 +147,6 @@ resource "google_cloud_run_v2_service" "api" {
   # actual token value) must exist before Cloud Run tries to reference
   # it as an environment variable. Both go in the same list.
   depends_on = [
-    google_project_service.required,
     google_secret_manager_secret_version.hf_token,
   ]
 }
