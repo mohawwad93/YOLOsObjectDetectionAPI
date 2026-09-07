@@ -54,6 +54,10 @@ resource "google_secret_manager_secret" "hf_token" {
 resource "google_secret_manager_secret_version" "hf_token" {
   secret      = google_secret_manager_secret.hf_token.id
   secret_data = var.hf_token
+  lifecycle {
+    create_before_destroy = true
+  }
+  deletion_policy = "ABANDON"
 }
 
 # ----------------------------------------------------------------------
@@ -101,7 +105,7 @@ resource "google_cloud_run_v2_service" "api" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.hf_token.secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.hf_token.version
           }
         }
       }
